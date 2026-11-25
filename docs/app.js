@@ -1,7 +1,7 @@
 import * as pdfjsLib from "./vendor/pdf.min.js";
-import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=6";
-import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=6";
-import { parseInvoiceXml } from "./xml.js?v=6";
+import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=7";
+import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=7";
+import { parseInvoiceXml } from "./xml.js?v=7";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.js", import.meta.url).href;
 const PDF_OPTS = {
@@ -301,15 +301,13 @@ $("addTime").checked = localStorage.getItem("hoadon-addTime") !== "0";
 $("fileName").addEventListener("change", () => localStorage.setItem("hoadon-fileName", $("fileName").value));
 $("addTime").addEventListener("change", () => localStorage.setItem("hoadon-addTime", $("addTime").checked ? "1" : "0"));
 
-// mẫu RX20: bật/tắt + chi nhánh, người nhập (nhớ trên trình duyệt)
+// mẫu nhập hàng RX20: bật/tắt + cách tính giá vốn (nhớ trên trình duyệt)
 $("rx20").checked = localStorage.getItem("hoadon-rx20") !== "0";
 const showRx20 = () => { $("rx20Fields").hidden = !$("rx20").checked; };
 showRx20();
 $("rx20").addEventListener("change", () => { localStorage.setItem("hoadon-rx20", $("rx20").checked ? "1" : "0"); showRx20(); });
-for (const id of ["chiNhanh", "nguoiNhap"]) {
-  $(id).value = localStorage.getItem("hoadon-" + id) || "";
-  $(id).addEventListener("input", () => localStorage.setItem("hoadon-" + id, $(id).value));
-}
+$("giaVon").value = localStorage.getItem("hoadon-giaVon") || "sau_thue";
+$("giaVon").addEventListener("change", () => localStorage.setItem("hoadon-giaVon", $("giaVon").value));
 
 if (canPickDir) {
   kv("outDir").then((h) => { if (h) outDir = h; renderOut(); }).catch(() => renderOut());
@@ -393,7 +391,7 @@ $("runBtn").addEventListener("click", async () => {
 
   try {
     $("progress").textContent = "Đang tạo file Excel…";
-    const rx20 = $("rx20").checked ? { chiNhanh: $("chiNhanh").value.trim(), nguoiNhap: $("nguoiNhap").value.trim() } : null;
+    const rx20 = $("rx20").checked ? { giaVon: $("giaVon").value } : null;
     const buf = await buildExcel(window.ExcelJS, invoices, errors, cfg, { rx20 });
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const msg = await saveFile(blob, outName());

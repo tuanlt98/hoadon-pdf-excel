@@ -1,6 +1,6 @@
 // Đọc hoá đơn điện tử XML theo chuẩn Tổng cục Thuế (TT78, thẻ <HDon>) -> cùng dạng object như parser.js.
 // Không dùng DOMParser để chạy được cả trên trình duyệt lẫn Node.
-import { norm, clean, castValue } from "./parser.js?v=6";
+import { norm, clean, castValue } from "./parser.js?v=7";
 
 // ------------------------------------------------------------ XML -> cây {tag, text, kids}
 const ENT = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };

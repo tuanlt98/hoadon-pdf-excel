@@ -6,9 +6,9 @@
   <title>Hoá đơn PDF → Excel</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23217346'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>X</text></svg>">
   <!-- ?v=… : tăng số này mỗi lần cập nhật để trình duyệt tải bản mới (cũng sửa trong app.js, excel.js) -->
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
   <script src="vendor/exceljs.min.js" defer></script>
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </head>
 <body>
   <main>
@@ -96,14 +96,20 @@
         <label class="check"><input id="addTime" type="checkbox" checked> Thêm ngày giờ vào tên file</label>
       </div>
       <div class="row" style="margin-top:6px">
-        <label class="check"><input id="rx20" type="checkbox" checked> Thêm sheet đúng mẫu <b>“Danh sách đơn nhập hàng” (RX20)</b></label>
+        <label class="check"><input id="rx20" type="checkbox" checked> Thêm sheet <b>“Data nhap hang”</b> đúng mẫu nhập hàng RX20 (tải lên ở Giao dịch → Hoá đơn nhập → Tải lên Excel)</label>
       </div>
       <div class="row" id="rx20Fields">
-        <label class="field">Chi nhánh <input id="chiNhanh" type="text" spellcheck="false" placeholder="vd: Nhà thuốc A"></label>
-        <label class="field">Người nhập <input id="nguoiNhap" type="text" spellcheck="false" placeholder="vd: Tuấn"></label>
+        <label class="field">Giá vốn
+          <select id="giaVon">
+            <option value="sau_thue">Sau thuế, đã trừ chiết khấu (tổng phiếu = tiền trả NCC)</option>
+            <option value="truoc_thue">Chưa thuế, chiết khấu ghi vào cột Giảm giá</option>
+            <option value="sau_thue_ck">Sau thuế, chiết khấu (gồm thuế) ghi vào cột Giảm giá</option>
+          </select>
+        </label>
       </div>
-      <p class="hint">Sheet này nằm đầu file. Dòng “Chiết khấu thương mại” được chia vào GIẢM GIÁ của các mặt hàng cùng thuế suất (theo tỷ lệ tiền, chưa thuế);
-        THÀNH TIỀN = (Số lượng × Đơn giá − Giảm giá) × (1 + Thuế suất). ĐƠN VỊ lấy chữ đầu (“Hộp 10 vỉ x 10 viên” → “Hộp”).</p>
+      <p class="hint">Mẫu RX20 không có cột thuế suất. Dòng “Chiết khấu thương mại” được chia cho các mặt hàng cùng thuế suất theo tỷ lệ tiền.
+        Mã thuốc = mã hàng trên hoá đơn; Đơn vị tính lấy chữ đầu (“Hộp 10 vỉ x 10 viên” → “Hộp”, phần đầy đủ ghi vào Quy cách đóng gói);
+        Mã nhập hàng = số hoá đơn. Chi nhánh chọn trong hộp thoại tải lên của RX20.</p>
     </section>
 
     <section class="card">

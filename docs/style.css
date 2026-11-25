@@ -54,7 +54,7 @@ header h1 { margin: 0 0 4px; font-size: 26px; }
 .out-info { margin: 0 0 12px; color: var(--muted); }
 .out-info b { color: var(--text); }
 .field { display: flex; align-items: center; gap: 8px; }
-.field input {
+.field input, .field select {
   font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; width: 220px;
 }
 .check { display: flex; align-items: center; gap: 6px; color: var(--muted); }
@@ -95,3 +95,4 @@ ul.hint { padding-left: 20px; margin: 6px 0 10px; }
 #detectTable .have { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .btn.small { padding: 3px 10px; font-size: 13px; white-space: nowrap; }
 footer { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.field select { width: auto; max-width: 100%; }

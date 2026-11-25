@@ -1,5 +1,5 @@
 // Tạo file Excel (3 sheet: ChiTiet, HoaDon, Loi) bằng ExcelJS (được truyền vào).
-import { isDiscount } from "./parser.js?v=6";
+import { isDiscount } from "./parser.js?v=7";
 
 const ITEM_COLUMNS = [
   ["File", (inv) => inv.file],
@@ -74,12 +74,23 @@ export const BUILTIN_COLUMNS = {
   HoaDon: INVOICE_COLUMNS.map((c) => c[0]),
 };
 
-// ------------------------------------------------------------ mẫu "Danh sách đơn nhập hàng" (RX20)
+// ------------------------------------------------------------ mẫu nhập hàng RX20 ("Mau-nhap-hang.xlsx", sheet "Data nhap hang")
+// [tiêu đề, độ rộng, màu nền: vàng = bắt buộc, xanh = cần cho liên thông Dược Quốc Gia, xám = không bắt buộc]
+const Y = "FFFFF2CC", B = "FFDDEBF7", G = "FFF2F2F2";
 const RX20_COLUMNS = [
-  ["CHI NHÁNH", 20], ["MÃ HĐ", 15], ["THỜI GIAN", 20], ["NHÀ CUNG CẤP", 25], ["NGƯỜI NHẬP", 15],
-  ["TÊN HÀNG", 30], ["MÃ HÀNG", 15], ["ĐƠN VỊ", 15], ["SỐ LÔ", 15], ["HẠN DÙNG", 15],
-  ["SỐ LƯỢNG", 10], ["ĐƠN GIÁ", 15], ["GIẢM GIÁ", 15], ["THUẾ SUẤT", 10], ["THÀNH TIỀN", 15],
+  ["Mã thuốc (*)", 18, Y], ["Tên thuốc (*)", 34, Y], ["Đơn vị tính (*)", 14, Y], ["Số lượng hàng trong lô (*)", 16, Y],
+  ["Giá vốn (*)", 14, Y], ["Nhà cung cấp (*)", 26, Y],
+  ["Số lô", 16, B], ["Hạn sử dụng", 18, B], ["Số đăng ký", 16, B], ["Hoạt chất", 30, B], ["Hàm lượng", 24, B],
+  ["Hãng sản xuất", 28, B], ["Nước sản xuất", 16, B], ["Quy cách đóng gói", 26, B], ["Nhóm", 20, B],
+  ["Giá bán", 14, G], ["Vị trí thuốc", 14, G], ["Số lượng cảnh báo", 16, G], ["Ghi chú", 20, G], ["Đường dùng", 16, G],
+  ["Giảm giá", 12, G], ["Loại giảm(%,vnd)", 16, G], ["Mã nhập hàng", 16, G], ["Ngày nhập hàng", 18, G],
 ];
+const RX20_NOTE = "(*) Cột nền vàng là BẮT BUỘC. Cột nền xanh cần cho liên thông Dược Quốc Gia (thuốc quản lý theo lô phải có Số lô và Hạn sử dụng). " +
+  "Cột nền xám không bắt buộc — Giá bán để trống thì lấy bằng giá vốn + 10%. Xem sheet \"Vi du\" để biết cách điền.";
+
+const ddmmyyyy = (d) => d instanceof Date
+  ? `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`
+  : d || null;
 
 const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
@@ -125,29 +136,59 @@ export function allocateDiscounts(inv) {
   });
 }
 
-function addRx20Sheet(wb, invoices, opts) {
-  const ws = wb.addWorksheet("Worksheet");
-  ws.columns = RX20_COLUMNS.map(([header, width]) => ({ header, width }));
-  ws.getRow(1).font = { bold: true };
+// opts.giaVon: "sau_thue" (mặc định) = (thành tiền sau thuế, đã trừ chiết khấu) ÷ SL -> tổng phiếu khớp tiền trả NCC
+//              "truoc_thue" = đơn giá chưa thuế, chiết khấu ghi vào Giảm giá (vnd) — mẫu không có cột thuế nên thuế bị bỏ
+//              "sau_thue_ck" = đơn giá × (1 + thuế), chiết khấu (đã gồm thuế) ghi vào Giảm giá (vnd)
+function addRx20Sheet(wb, invoices, opts, errors) {
+  const ws = wb.addWorksheet("Data nhap hang");
+  ws.columns = RX20_COLUMNS.map(([, width]) => ({ width }));
+  ws.mergeCells(1, 1, 1, RX20_COLUMNS.length);
+  const note = ws.getCell(1, 1);
+  note.value = RX20_NOTE;
+  note.font = { bold: true, color: { argb: "FFC00000" } };
+  ws.getRow(1).height = 22;
+  const head = ws.getRow(2);
+  head.height = 32;
+  RX20_COLUMNS.forEach(([h, , fill], i) => {
+    const c = head.getCell(i + 1);
+    c.value = h;
+    c.font = { bold: true };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+    c.alignment = { wrapText: true, vertical: "middle" };
+    c.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+  });
+  ws.views = [{ state: "frozen", ySplit: 2 }];
+
+  const mode = opts.giaVon || "sau_thue";
   for (const inv of invoices) {
-    for (const { it, giam, thanhTien } of allocateDiscounts(inv)) {
-      const row = ws.addRow([
-        opts.chiNhanh || null, inv.so_hd || null, inv.ngay_hd || null, inv.ten_ncc || null, opts.nguoiNhap || null,
-        it.ten_hang || null, it.ma_hang || null, shortUnit(it.dvt) || null, it.so_lo || null, it.han_dung || null,
-        it.so_luong ?? null, it.don_gia ?? null, giam || null, it.thue_suat ?? null, thanhTien,
-      ]);
-      for (const c of [2, 7, 9]) row.getCell(c).numFmt = "@";
-      for (const c of [3, 10]) if (row.getCell(c).value instanceof Date) row.getCell(c).numFmt = "dd/mm/yyyy";
-      for (const c of [12, 13, 15]) {
-        const v = row.getCell(c).value;
-        if (typeof v === "number") row.getCell(c).numFmt = Number.isInteger(v) ? "#,##0" : "#,##0.00";
-      }
+    const lines = allocateDiscounts(inv);
+    if (lines.length > 100) errors.push([inv.file, `Hoá đơn ${inv.so_hd} có ${lines.length} mặt hàng — RX20 chỉ nhận tối đa 100 sản phẩm/đơn`]);
+    for (const { it, giam, thanhTien } of lines) {
+      const q = it.so_luong, rate = typeof it.thue_suat === "number" ? it.thue_suat : 0;
+      let giaVon, giamGia = null;
+      if (mode === "truoc_thue") { giaVon = it.don_gia; giamGia = giam ? round(giam) : null; }
+      else if (mode === "sau_thue_ck") {
+        giaVon = it.don_gia != null ? round(it.don_gia * (1 + rate / 100)) : null;
+        giamGia = giam ? Math.round(giam * (1 + rate / 100)) : null;
+      } else giaVon = q ? round(thanhTien / q) : null;
+      if (!it.ma_hang) errors.push([inv.file, `HĐ ${inv.so_hd}: “${it.ten_hang}” không có mã hàng — cần điền Mã thuốc trước khi tải lên RX20`]);
+      const dvt = shortUnit(it.dvt);
+      const row = Array(RX20_COLUMNS.length).fill(null);
+      Object.assign(row, {
+        0: it.ma_hang || null, 1: it.ten_hang || null, 2: dvt || null, 3: q ?? null, 4: giaVon ?? null, 5: inv.ten_ncc || null,
+        6: it.so_lo || null, 7: ddmmyyyy(it.han_dung),
+        13: it.dvt && it.dvt !== dvt ? it.dvt : null, // "Hộp 10 vỉ x 10 viên nén" -> Quy cách đóng gói
+        20: giamGia, 21: giamGia ? "vnd" : null,
+        22: inv.so_hd || null, 23: ddmmyyyy(inv.ngay_hd),
+      });
+      const r = ws.addRow(row);
+      for (const c of [1, 7, 8, 23, 24]) r.getCell(c).numFmt = "@";
     }
   }
 }
 
 // extras: cấu hình trường bổ sung (xem parser.js). Trường "header" -> cả 2 sheet, trường "table" -> ChiTiet.
-// opts.rx20: {chiNhanh, nguoiNhap} -> thêm sheet đầu tiên đúng mẫu "Danh sách đơn nhập hàng" RX20.
+// opts.rx20: {giaVon} -> thêm sheet đầu tiên "Data nhap hang" đúng mẫu nhập hàng của RX20.
 export async function buildExcel(ExcelJS, invoices, errors, extras = [], opts = {}) {
   extras = extras.filter((e) => e && String(e.name || "").trim() && String(e.label || "").trim());
   const used = new Set([...ITEM_COLUMNS, ...INVOICE_COLUMNS].map((c) => c[0]));
@@ -167,7 +208,7 @@ export async function buildExcel(ExcelJS, invoices, errors, extras = [], opts = 
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Hoá đơn PDF → Excel";
-  if (opts.rx20) addRx20Sheet(wb, invoices, opts.rx20);
+  if (opts.rx20) addRx20Sheet(wb, invoices, opts.rx20, errors);
   fillSheet(wb.addWorksheet("ChiTiet"), itemCols.map((c) => c[0]),
     invoices.flatMap((inv) => inv.items.map((it) => itemCols.map(([, f]) => f(inv, it)))), textCols);
   fillSheet(wb.addWorksheet("HoaDon"), invCols.map((c) => c[0]),
