@@ -6,3 +6,5 @@
 __pycache__/
 *.pyc
 .claude/
+*.mp4
+HUONG_DAN_*.md
