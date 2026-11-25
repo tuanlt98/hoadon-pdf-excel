@@ -6,9 +6,9 @@
   <title>Hoá đơn PDF → Excel</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23217346'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>X</text></svg>">
   <!-- ?v=… : tăng số này mỗi lần cập nhật để trình duyệt tải bản mới (cũng sửa trong app.js, excel.js) -->
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <script src="vendor/exceljs.min.js" defer></script>
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </head>
 <body>
   <main>
@@ -95,6 +95,15 @@
         </label>
         <label class="check"><input id="addTime" type="checkbox" checked> Thêm ngày giờ vào tên file</label>
       </div>
+      <div class="row" style="margin-top:6px">
+        <label class="check"><input id="rx20" type="checkbox" checked> Thêm sheet đúng mẫu <b>“Danh sách đơn nhập hàng” (RX20)</b></label>
+      </div>
+      <div class="row" id="rx20Fields">
+        <label class="field">Chi nhánh <input id="chiNhanh" type="text" spellcheck="false" placeholder="vd: Nhà thuốc A"></label>
+        <label class="field">Người nhập <input id="nguoiNhap" type="text" spellcheck="false" placeholder="vd: Tuấn"></label>
+      </div>
+      <p class="hint">Sheet này nằm đầu file. Dòng “Chiết khấu thương mại” được chia vào GIẢM GIÁ của các mặt hàng cùng thuế suất (theo tỷ lệ tiền, chưa thuế);
+        THÀNH TIỀN = (Số lượng × Đơn giá − Giảm giá) × (1 + Thuế suất). ĐƠN VỊ lấy chữ đầu (“Hộp 10 vỉ x 10 viên” → “Hộp”).</p>
     </section>
 
     <section class="card">

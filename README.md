@@ -31,6 +31,7 @@ Hoặc kéo-thả file/thư mục vào `keo_tha_vao_day.bat`.
 
 ## File Excel đầu ra
 
+- **Worksheet** (bản web, bật/tắt ở bước 2) – đúng mẫu “Danh sách đơn nhập hàng” của RX20: CHI NHÁNH, MÃ HĐ, THỜI GIAN, NHÀ CUNG CẤP, NGƯỜI NHẬP, TÊN HÀNG, MÃ HÀNG, ĐƠN VỊ, SỐ LÔ, HẠN DÙNG, SỐ LƯỢNG, ĐƠN GIÁ, GIẢM GIÁ, THUẾ SUẤT, THÀNH TIỀN. Dòng chiết khấu thương mại được chia vào GIẢM GIÁ (chưa thuế) của các mặt hàng cùng thuế suất theo tỷ lệ tiền; THÀNH TIỀN = (SL × Đơn giá − Giảm giá) × (1 + thuế suất). Xem `HUONG_DAN_NHAP_HANG_RX20.md`.
 - **ChiTiet** – mỗi dòng hàng 1 dòng: Ký hiệu, Số HĐ, Ngày, MST/Tên NCC, Mã đơn hàng, Mã hàng, Tên hàng, Số lô, Hạn dùng, ĐVT, SL, Đơn giá, Thuế suất, Tiền thuế, Thành tiền, Loại dòng (Hàng hoá / Chiết khấu).
 - **HoaDon** – mỗi hoá đơn 1 dòng: người bán, người mua, tổng tiền theo thuế suất, cột **Kiểm tra** (tự đối chiếu tổng dòng hàng với tổng thanh toán và SL×ĐG).
 - **Loi** – file lỗi (PDF scan, mẫu lạ, file hỏng) hoặc lệch tổng, cần xem lại bằng tay.

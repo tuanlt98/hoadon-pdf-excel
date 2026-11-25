@@ -1,5 +1,5 @@
 // Tạo file Excel (3 sheet: ChiTiet, HoaDon, Loi) bằng ExcelJS (được truyền vào).
-import { isDiscount } from "./parser.js?v=4";
+import { isDiscount } from "./parser.js?v=5";
 
 const ITEM_COLUMNS = [
   ["File", (inv) => inv.file],
@@ -74,8 +74,80 @@ export const BUILTIN_COLUMNS = {
   HoaDon: INVOICE_COLUMNS.map((c) => c[0]),
 };
 
+// ------------------------------------------------------------ mẫu "Danh sách đơn nhập hàng" (RX20)
+const RX20_COLUMNS = [
+  ["CHI NHÁNH", 20], ["MÃ HĐ", 15], ["THỜI GIAN", 20], ["NHÀ CUNG CẤP", 25], ["NGƯỜI NHẬP", 15],
+  ["TÊN HÀNG", 30], ["MÃ HÀNG", 15], ["ĐƠN VỊ", 15], ["SỐ LÔ", 15], ["HẠN DÙNG", 15],
+  ["SỐ LƯỢNG", 10], ["ĐƠN GIÁ", 15], ["GIẢM GIÁ", 15], ["THUẾ SUẤT", 10], ["THÀNH TIỀN", 15],
+];
+
+const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
+
+// tiền hàng chưa thuế của 1 dòng
+function preTax(it) {
+  if (it.so_luong != null && it.don_gia != null) return it.so_luong * it.don_gia;
+  if (it.thanh_tien != null) {
+    if (it.tien_thue != null) return it.thanh_tien - it.tien_thue;
+    return it.thanh_tien / (1 + (it.thue_suat || 0) / 100);
+  }
+  return 0;
+}
+
+// "Hộp 10 vỉ x 10 viên nén" -> "Hộp"; "Chai 100ml" -> "Chai"; "Viên" -> "Viên"
+export function shortUnit(dvt) {
+  const s = String(dvt || "").trim();
+  const m = s.match(/^([^\d(]+?)\s*[\d(]/);
+  return m ? m[1].trim() : s;
+}
+
+// Chia dòng chiết khấu (chưa thuế) vào các dòng hàng cùng thuế suất theo tỷ lệ tiền hàng.
+// Dòng cuối lấy phần còn lại để tổng không lệch do làm tròn.
+export function allocateDiscounts(inv) {
+  const goods = inv.items.filter((it) => !isDiscount(it));
+  const ck = new Map(goods.map((it) => [it, 0]));
+  for (const d of inv.items.filter(isDiscount)) {
+    const amount = Math.abs(preTax(d));
+    let group = goods.filter((it) => (it.thue_suat ?? null) === (d.thue_suat ?? null));
+    if (!group.length) group = goods; // không có hàng cùng thuế suất -> chia cho tất cả
+    const total = group.reduce((s, it) => s + preTax(it), 0);
+    let left = round(amount);
+    group.forEach((it, i) => {
+      const part = i === group.length - 1 ? left : round(total ? amount * preTax(it) / total : amount / group.length);
+      ck.set(it, round(ck.get(it) + part));
+      left = round(left - part);
+    });
+  }
+  return goods.map((it) => {
+    const giam = ck.get(it);
+    const rate = it.thue_suat || 0;
+    return { it, giam, thanhTien: Math.round((preTax(it) - giam) * (1 + rate / 100)) };
+  });
+}
+
+function addRx20Sheet(wb, invoices, opts) {
+  const ws = wb.addWorksheet("Worksheet");
+  ws.columns = RX20_COLUMNS.map(([header, width]) => ({ header, width }));
+  ws.getRow(1).font = { bold: true };
+  for (const inv of invoices) {
+    for (const { it, giam, thanhTien } of allocateDiscounts(inv)) {
+      const row = ws.addRow([
+        opts.chiNhanh || null, inv.so_hd || null, inv.ngay_hd || null, inv.ten_ncc || null, opts.nguoiNhap || null,
+        it.ten_hang || null, it.ma_hang || null, shortUnit(it.dvt) || null, it.so_lo || null, it.han_dung || null,
+        it.so_luong ?? null, it.don_gia ?? null, giam || null, it.thue_suat ?? null, thanhTien,
+      ]);
+      for (const c of [2, 7, 9]) row.getCell(c).numFmt = "@";
+      for (const c of [3, 10]) if (row.getCell(c).value instanceof Date) row.getCell(c).numFmt = "dd/mm/yyyy";
+      for (const c of [12, 13, 15]) {
+        const v = row.getCell(c).value;
+        if (typeof v === "number") row.getCell(c).numFmt = Number.isInteger(v) ? "#,##0" : "#,##0.00";
+      }
+    }
+  }
+}
+
 // extras: cấu hình trường bổ sung (xem parser.js). Trường "header" -> cả 2 sheet, trường "table" -> ChiTiet.
-export async function buildExcel(ExcelJS, invoices, errors, extras = []) {
+// opts.rx20: {chiNhanh, nguoiNhap} -> thêm sheet đầu tiên đúng mẫu "Danh sách đơn nhập hàng" RX20.
+export async function buildExcel(ExcelJS, invoices, errors, extras = [], opts = {}) {
   extras = extras.filter((e) => e && String(e.name || "").trim() && String(e.label || "").trim());
   const used = new Set([...ITEM_COLUMNS, ...INVOICE_COLUMNS].map((c) => c[0]));
   const colName = (e) => (used.has(e.name.trim()) ? e.name.trim() + " (bổ sung)" : e.name.trim());
@@ -94,6 +166,7 @@ export async function buildExcel(ExcelJS, invoices, errors, extras = []) {
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Hoá đơn PDF → Excel";
+  if (opts.rx20) addRx20Sheet(wb, invoices, opts.rx20);
   fillSheet(wb.addWorksheet("ChiTiet"), itemCols.map((c) => c[0]),
     invoices.flatMap((inv) => inv.items.map((it) => itemCols.map(([, f]) => f(inv, it)))), textCols);
   fillSheet(wb.addWorksheet("HoaDon"), invCols.map((c) => c[0]),

@@ -1,6 +1,6 @@
 import * as pdfjsLib from "./vendor/pdf.min.js";
-import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=4";
-import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=4";
+import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=5";
+import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=5";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.js", import.meta.url).href;
 const PDF_OPTS = {
@@ -299,6 +299,16 @@ $("addTime").checked = localStorage.getItem("hoadon-addTime") !== "0";
 $("fileName").addEventListener("change", () => localStorage.setItem("hoadon-fileName", $("fileName").value));
 $("addTime").addEventListener("change", () => localStorage.setItem("hoadon-addTime", $("addTime").checked ? "1" : "0"));
 
+// mẫu RX20: bật/tắt + chi nhánh, người nhập (nhớ trên trình duyệt)
+$("rx20").checked = localStorage.getItem("hoadon-rx20") !== "0";
+const showRx20 = () => { $("rx20Fields").hidden = !$("rx20").checked; };
+showRx20();
+$("rx20").addEventListener("change", () => { localStorage.setItem("hoadon-rx20", $("rx20").checked ? "1" : "0"); showRx20(); });
+for (const id of ["chiNhanh", "nguoiNhap"]) {
+  $(id).value = localStorage.getItem("hoadon-" + id) || "";
+  $(id).addEventListener("input", () => localStorage.setItem("hoadon-" + id, $(id).value));
+}
+
 if (canPickDir) {
   kv("outDir").then((h) => { if (h) outDir = h; renderOut(); }).catch(() => renderOut());
 } else renderOut();
@@ -371,7 +381,8 @@ $("runBtn").addEventListener("click", async () => {
 
   try {
     $("progress").textContent = "Đang tạo file Excel…";
-    const buf = await buildExcel(window.ExcelJS, invoices, errors, cfg);
+    const rx20 = $("rx20").checked ? { chiNhanh: $("chiNhanh").value.trim(), nguoiNhap: $("nguoiNhap").value.trim() } : null;
+    const buf = await buildExcel(window.ExcelJS, invoices, errors, cfg, { rx20 });
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const msg = await saveFile(blob, outName());
     $("progress").textContent = `${msg} — ${invoices.length} hoá đơn, ${errors.length} lỗi/cảnh báo.`;
