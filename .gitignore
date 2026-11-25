@@ -1,0 +1,8 @@
+# dữ liệu hoá đơn thật - không đưa lên git
+*.pdf
+*.xlsx
+*.xls
+
+__pycache__/
+*.pyc
+.claude/

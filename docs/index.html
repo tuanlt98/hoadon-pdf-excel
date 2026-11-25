@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hoá đơn PDF → Excel</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23217346'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>X</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script src="vendor/exceljs.min.js" defer></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Hoá đơn PDF → Excel</h1>
+      <p class="sub">Đọc hoá đơn GTGT điện tử (PDF) và gộp thành 1 file Excel.
+        <strong>Xử lý ngay trên máy bạn</strong> — file không được tải lên máy chủ nào.</p>
+    </header>
+
+    <section class="card">
+      <h2><span class="step">1</span> Chọn hoá đơn PDF</h2>
+      <div class="row">
+        <label class="btn">
+          <input id="pickFiles" type="file" accept=".pdf,application/pdf" multiple hidden>
+          Chọn nhiều file
+        </label>
+        <label class="btn">
+          <input id="pickFolder" type="file" webkitdirectory multiple hidden>
+          Chọn cả thư mục
+        </label>
+        <button id="clearBtn" class="btn ghost" type="button" disabled>Xoá danh sách</button>
+      </div>
+      <div id="drop" class="drop">hoặc kéo-thả file / thư mục PDF vào đây</div>
+      <p class="hint">Khi chọn thư mục, trình duyệt có thể hỏi “tải lên” — thực chất chỉ là cho trang đọc file trên máy, không gửi đi đâu.</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span> Nơi lưu file Excel</h2>
+      <div class="row">
+        <button id="pickOut" class="btn" type="button">Chọn thư mục lưu</button>
+        <button id="resetOut" class="btn ghost" type="button" hidden>Dùng thư mục Tải về</button>
+      </div>
+      <p id="outInfo" class="out-info"></p>
+      <div class="row">
+        <label class="field">Tên file
+          <input id="fileName" type="text" value="hoa_don" spellcheck="false">
+        </label>
+        <label class="check"><input id="addTime" type="checkbox" checked> Thêm ngày giờ vào tên file</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span> Xuất Excel</h2>
+      <div class="row">
+        <button id="runBtn" class="btn primary" type="button" disabled>Đọc &amp; xuất Excel</button>
+        <span id="progress" class="progress"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="list">
+          <thead>
+            <tr><th>#</th><th>File</th><th>Trạng thái</th><th>Số HĐ</th><th>Nhà cung cấp</th><th class="num">Dòng hàng</th><th class="num">Tổng thanh toán</th></tr>
+          </thead>
+          <tbody><tr class="empty"><td colspan="7">Chưa có file nào</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      File Excel gồm 3 sheet: <b>ChiTiet</b> (mỗi dòng hàng 1 dòng), <b>HoaDon</b> (mỗi hoá đơn 1 dòng, có cột kiểm tra tổng), <b>Loi</b> (file cần xem lại).
+      Chỉ đọc được PDF có lớp chữ (bôi đen được chữ), không đọc được PDF scan/ảnh.
+    </footer>
+  </main>
+</body>
+</html>
