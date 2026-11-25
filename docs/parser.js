@@ -281,7 +281,7 @@ function parseTable(pg, tableExtras = []) {
   }
 
   const rows = [];
-  let totals = null;
+  let totals = null, firstCells = null;
   for (const [lo, hi] of bands) {
     const inBand = body.filter((it) => it.yc > lo && it.yc <= hi);
     if (!inBand.length) continue;
@@ -300,6 +300,7 @@ function parseTable(pg, tableExtras = []) {
     if (mapHeader(cells)) continue; // header lặp
     const get = (k) => (k in cols ? clean(cells[cols[k]]) : "");
     if (!get("ten_hang")) continue;
+    if (!firstCells) firstCells = cells;
     const extra = {};
     for (const ex of extraCols) extra[ex.name] = ex.idx >= 0 ? castValue(cells[ex.idx], ex.type) : null;
     rows.push({
@@ -317,7 +318,10 @@ function parseTable(pg, tableExtras = []) {
       thanh_tien: toNumber(get("thanh_tien")),
     });
   }
-  return { rows, totals, headerTop: top, missing: extraCols.filter((e) => e.idx < 0).map((e) => e.label) };
+  return {
+    rows, totals, headerTop: top, labels, firstCells,
+    missing: extraCols.filter((e) => e.idx < 0).map((e) => e.label),
+  };
 }
 
 // ------------------------------------------------------------ trường bổ sung "Nhãn : giá trị" ở phần thông tin chung
@@ -351,7 +355,7 @@ function findLabelValue(pages, label) {
       let vEnd = text.length;
       // dừng ở mẩu chữ kế tiếp trông giống một nhãn khác ("Mã đơn hàng :")
       ln.items.forEach((it, i) => {
-        if (starts[i] >= vStart && starts[i] < vEnd && starts[i] > vStart && LABEL_LIKE.test(it.str)) vEnd = starts[i];
+        if (starts[i] >= vStart && starts[i] < vEnd && LABEL_LIKE.test(it.str) && !/:\/\//.test(it.str)) vEnd = starts[i];
       });
       let val = text.slice(vStart, vEnd).trim();
       // bỏ dấu đóng ngoặc lẻ ở cuối, vd "mã tra cứu: ABC )"
@@ -496,6 +500,53 @@ export function validate(inv) {
 }
 
 // ------------------------------------------------------------ entry
+
+// ------------------------------------------------------------ dò các trường có trên 1 hoá đơn (để người dùng chọn)
+
+// nhãn mà file Excel đã có sẵn cột tương ứng
+const BUILTIN_HEADER = [
+  ...Object.keys(SELLER_KEYS), ...Object.keys(BUYER_KEYS),
+  "ky hieu", "so", "mcqt", "ma tra cuu", "so tien viet bang chu",
+  "tong tien hang khong chiu thue", "tong tien hang chiu thue", "tong tien thue gtgt", "tong cong tien thanh toan",
+];
+
+export async function detectFields(pdfjsLib, data, opts = {}) {
+  const doc = await pdfjsLib.getDocument({ data, ...opts }).promise;
+  try {
+    const pages = [];
+    for (let i = 1; i <= doc.numPages; i++) pages.push(await readPage(pdfjsLib, await doc.getPage(i)));
+    const header = [], seen = new Set();
+    for (const pg of pages) {
+      for (const it of pg.items) {
+        const m = it.str.match(/^[\s,;(]*([^:]{2,50}?)\s*(\([^)]*\))?\s*:/);
+        if (!m || /^\d/.test(m[1]) || /https?$/i.test(m[1])) continue;
+        const label = m[1].trim();
+        const n = norm(label).replace(/\s*\d+%$/, "");
+        if (seen.has(norm(label))) continue;
+        seen.add(norm(label));
+        header.push({
+          label,
+          value: findLabelValue(pages, label) || "",
+          builtIn: BUILTIN_HEADER.some((b) => n === b || n.startsWith(b + " ")),
+        });
+      }
+    }
+    const table = [];
+    for (const pg of pages) {
+      const t = parseTable(pg);
+      if (!t) continue;
+      const std = mapHeader(t.labels) || {};
+      const stdIdx = new Set(Object.values(std));
+      t.labels.forEach((lab, i) => {
+        if (lab) table.push({ label: lab, value: t.firstCells ? clean(t.firstCells[i]) : "", builtIn: stdIdx.has(i) });
+      });
+      break;
+    }
+    return { header, table };
+  } finally {
+    doc.destroy();
+  }
+}
 
 // extras: [{name: "Tên cột Excel", label: "chữ trên hoá đơn", where: "header"|"table", type: "text"|"number"|"date"}]
 export async function parseInvoicePdf(pdfjsLib, data, opts = {}, extras = []) {

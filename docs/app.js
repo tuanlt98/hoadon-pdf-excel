@@ -1,6 +1,6 @@
 import * as pdfjsLib from "./vendor/pdf.min.js";
-import { parseInvoicePdf, validate } from "./parser.js";
-import { buildExcel } from "./excel.js";
+import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=4";
+import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=4";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.js", import.meta.url).href;
 const PDF_OPTS = {
@@ -148,7 +148,7 @@ $("extraTable").addEventListener("change", (ev) => {
 });
 $("extraTable").addEventListener("click", (ev) => {
   const d = ev.target.dataset.del;
-  if (d !== undefined) { extras.splice(+d, 1); renderExtras(); }
+  if (d !== undefined) { extras.splice(+d, 1); renderExtras(); renderDetected(); }
 });
 $("addExtra").addEventListener("click", () => {
   extras.push({ name: "", label: "", where: "header", type: "text" });
@@ -183,6 +183,70 @@ $("importCfg").addEventListener("change", async (ev) => {
   }
 });
 renderExtras();
+
+// danh sách cột có sẵn
+$("builtinCols").innerHTML = Object.entries(BUILTIN_COLUMNS).map(([sheet, cols]) =>
+  `<div><b>Sheet ${sheet}:</b> ${cols.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div>`).join("");
+
+// ------------------------------------------------------------ dò trường trên hoá đơn
+
+let detected = [];
+const isAdded = (d) => extras.some((e) => norm(e.label) === norm(d.label) && (e.where === "table") === (d.where === "table"));
+
+function guessType(v) {
+  const t = String(v || "").trim();
+  if (/^\d{1,2}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{2,4}$/.test(t) || /tháng.*năm/i.test(t)) return "date";
+  if (/^-?[\d.,]+%?$/.test(t) && !/^0\d/.test(t) && /[.,]|^\d{1,6}$/.test(t)) return "number";
+  return "text";
+}
+
+function renderDetected() {
+  const tb = $("detectTable").querySelector("tbody");
+  tb.innerHTML = detected.map((d, i) => {
+    const act = d.builtIn ? '<span class="have">Đã có sẵn</span>'
+      : isAdded(d) ? '<span class="have">✓ Đã thêm</span>'
+      : `<button class="btn small" data-add="${i}" type="button">+ Thêm</button>`;
+    return `<tr><td>${d.where === "table" ? "Bảng hàng" : "Thông tin chung"}</td><td>${esc(d.label)}</td>
+      <td class="val">${esc(d.value) || "<i>(trống)</i>"}</td><td>${act}</td></tr>`;
+  }).join("");
+}
+
+$("detectTable").addEventListener("click", (ev) => {
+  const i = ev.target.dataset.add;
+  if (i === undefined) return;
+  const d = detected[+i];
+  extras.push({ name: d.label, label: d.label, where: d.where, type: guessType(d.value) });
+  renderExtras();
+  renderDetected();
+});
+
+async function runDetect(file, name) {
+  $("detectInfo").textContent = `Đang dò ${name}…`;
+  try {
+    const r = await detectFields(pdfjsLib, new Uint8Array(await file.arrayBuffer()), PDF_OPTS);
+    detected = [
+      ...r.header.map((d) => ({ ...d, where: "header" })),
+      ...r.table.map((d) => ({ ...d, where: "table" })),
+    ].sort((a, b) => a.builtIn - b.builtIn);
+    renderDetected();
+    $("detectBox").hidden = false;
+    const free = detected.filter((d) => !d.builtIn).length;
+    $("detectInfo").textContent = `Dò từ file “${name}”: ${detected.length} trường, ${free} trường chưa có sẵn.`;
+  } catch (e) {
+    $("detectInfo").textContent = "Không dò được: " + e.message;
+  }
+}
+
+const detectPicker = Object.assign(document.createElement("input"), { type: "file", accept: ".pdf,application/pdf" });
+detectPicker.addEventListener("change", () => {
+  const f = detectPicker.files[0];
+  detectPicker.value = "";
+  if (f) runDetect(f, f.name);
+});
+$("detectBtn").addEventListener("click", () => {
+  if (files.length) runDetect(files[0].file, files[0].path);
+  else detectPicker.click(); // chưa chọn file nào ở bước 1 -> cho chọn 1 file mẫu
+});
 
 // ------------------------------------------------------------ thư mục lưu (nhớ giữa các lần mở trang)
 

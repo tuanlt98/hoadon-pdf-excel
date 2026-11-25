@@ -1,5 +1,5 @@
 // Tạo file Excel (3 sheet: ChiTiet, HoaDon, Loi) bằng ExcelJS (được truyền vào).
-import { isDiscount } from "./parser.js";
+import { isDiscount } from "./parser.js?v=4";
 
 const ITEM_COLUMNS = [
   ["File", (inv) => inv.file],
@@ -67,6 +67,12 @@ function fillSheet(ws, headers, rows, textCols = TEXT_COLS) {
     });
   });
 }
+
+// tên các cột có sẵn (để hiện cho người dùng biết)
+export const BUILTIN_COLUMNS = {
+  ChiTiet: ITEM_COLUMNS.map((c) => c[0]),
+  HoaDon: INVOICE_COLUMNS.map((c) => c[0]),
+};
 
 // extras: cấu hình trường bổ sung (xem parser.js). Trường "header" -> cả 2 sheet, trường "table" -> ChiTiet.
 export async function buildExcel(ExcelJS, invoices, errors, extras = []) {

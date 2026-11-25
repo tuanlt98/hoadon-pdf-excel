@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hoá đơn PDF → Excel</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23217346'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>X</text></svg>">
-  <link rel="stylesheet" href="style.css">
+  <!-- ?v=… : tăng số này mỗi lần cập nhật để trình duyệt tải bản mới (cũng sửa trong app.js, excel.js) -->
+  <link rel="stylesheet" href="style.css?v=4">
   <script src="vendor/exceljs.min.js" defer></script>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=4"></script>
 </head>
 <body>
   <main>
@@ -37,11 +38,32 @@
     <section class="card">
       <details id="extraBox">
         <summary><h2><span class="step">⚙</span> Cột bổ sung <span id="extraCount" class="badge"></span> <small>(tuỳ chọn)</small></h2></summary>
-        <p class="hint">Lấy thêm trường không có sẵn trong file Excel. Gõ <b>đúng chữ in trên hoá đơn</b> (không cần dấu hai chấm, không phân biệt hoa thường/dấu).</p>
-        <ul class="hint">
-          <li><b>Thông tin chung</b>: trường dạng <i>“Nhãn : giá trị”</i> ở phần đầu/cuối hoá đơn, vd <i>Mã khách hàng</i>, <i>Số hợp đồng</i>, <i>Ghi chú</i>. Ra ở cả sheet ChiTiet và HoaDon.</li>
-          <li><b>Cột trong bảng hàng</b>: tiêu đề một cột của bảng hàng hoá, vd <i>Nước sản xuất</i>, <i>Chiết khấu (%)</i>. Ra ở sheet ChiTiet.</li>
-        </ul>
+        <p class="hint">File Excel đã có sẵn nhiều cột. Mục này chỉ dùng khi hoá đơn có <b>trường khác</b> mà bạn muốn lấy thêm.</p>
+
+        <h3>Các cột đã có sẵn trong Excel</h3>
+        <div id="builtinCols" class="builtin"></div>
+
+        <h3>Cách thêm cột</h3>
+        <ol class="hint">
+          <li>Chọn hoá đơn ở bước 1, rồi bấm <b>🔍 Dò trường trên hoá đơn</b> — trang sẽ liệt kê mọi trường đọc được kèm giá trị ví dụ.</li>
+          <li>Trường nào ghi <i>“Đã có sẵn”</i> thì không cần thêm. Trường muốn lấy thì bấm <b>+ Thêm</b>.</li>
+          <li>Sửa “Tên cột trong Excel” nếu muốn, chọn kiểu Chữ / Số / Ngày, rồi xuất Excel như bình thường.</li>
+        </ol>
+        <p class="hint">Hoặc tự bấm <b>+ Thêm trường</b> và gõ đúng chữ in trên hoá đơn (không cần dấu “:”, không phân biệt hoa thường/dấu).
+          <b>Thông tin chung</b> = trường dạng “Nhãn : giá trị” (ra ở cả 2 sheet); <b>Cột trong bảng hàng</b> = tiêu đề cột trong bảng hàng hoá (ra ở sheet ChiTiet).</p>
+
+        <div class="row">
+          <button id="detectBtn" class="btn" type="button">🔍 Dò trường trên hoá đơn</button>
+          <span id="detectInfo" class="progress"></span>
+        </div>
+        <div id="detectBox" class="table-wrap" hidden>
+          <table id="detectTable">
+            <thead><tr><th>Lấy ở</th><th>Chữ trên hoá đơn</th><th>Giá trị ví dụ</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3>Cột bổ sung của bạn</h3>
         <div class="table-wrap">
           <table id="extraTable">
             <thead><tr><th>Tên cột trong Excel</th><th>Chữ trên hoá đơn</th><th>Lấy ở</th><th>Kiểu</th><th></th></tr></thead>
