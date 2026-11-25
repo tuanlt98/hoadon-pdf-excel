@@ -6,23 +6,23 @@
   <title>Hoá đơn PDF → Excel</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23217346'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>X</text></svg>">
   <!-- ?v=… : tăng số này mỗi lần cập nhật để trình duyệt tải bản mới (cũng sửa trong app.js, excel.js) -->
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
   <script src="vendor/exceljs.min.js" defer></script>
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=6"></script>
 </head>
 <body>
   <main>
     <header>
       <h1>Hoá đơn PDF → Excel</h1>
-      <p class="sub">Đọc hoá đơn GTGT điện tử (PDF) và gộp thành 1 file Excel.
+      <p class="sub">Đọc hoá đơn GTGT điện tử (PDF hoặc XML) và gộp thành 1 file Excel.
         <strong>Xử lý ngay trên máy bạn</strong> — file không được tải lên máy chủ nào.</p>
     </header>
 
     <section class="card">
-      <h2><span class="step">1</span> Chọn hoá đơn PDF</h2>
+      <h2><span class="step">1</span> Chọn hoá đơn PDF / XML</h2>
       <div class="row">
         <label class="btn">
-          <input id="pickFiles" type="file" accept=".pdf,application/pdf" multiple hidden>
+          <input id="pickFiles" type="file" accept=".pdf,.xml,application/pdf,text/xml,application/xml" multiple hidden>
           Chọn nhiều file
         </label>
         <label class="btn">
@@ -31,7 +31,7 @@
         </label>
         <button id="clearBtn" class="btn ghost" type="button" disabled>Xoá danh sách</button>
       </div>
-      <div id="drop" class="drop">hoặc kéo-thả file / thư mục PDF vào đây</div>
+      <div id="drop" class="drop">hoặc kéo-thả file / thư mục PDF, XML vào đây</div>
       <p class="hint">Khi chọn thư mục, trình duyệt có thể hỏi “tải lên” — thực chất chỉ là cho trang đọc file trên máy, không gửi đi đâu.</p>
     </section>
 
@@ -124,7 +124,7 @@
 
     <footer>
       File Excel gồm 3 sheet: <b>ChiTiet</b> (mỗi dòng hàng 1 dòng), <b>HoaDon</b> (mỗi hoá đơn 1 dòng, có cột kiểm tra tổng), <b>Loi</b> (file cần xem lại).
-      Chỉ đọc được PDF có lớp chữ (bôi đen được chữ), không đọc được PDF scan/ảnh.
+      Nên dùng file <b>XML</b> nếu có (chính xác tuyệt đối). PDF chỉ đọc được bản có lớp chữ (bôi đen được chữ), không đọc được PDF scan/ảnh. Cùng 1 hoá đơn có cả PDF và XML thì chỉ lấy 1 lần (ưu tiên XML).
     </footer>
   </main>
 </body>

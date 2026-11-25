@@ -1,6 +1,7 @@
 import * as pdfjsLib from "./vendor/pdf.min.js";
-import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=5";
-import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=5";
+import { parseInvoicePdf, validate, detectFields, norm } from "./parser.js?v=6";
+import { buildExcel, BUILTIN_COLUMNS } from "./excel.js?v=6";
+import { parseInvoiceXml } from "./xml.js?v=6";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.js", import.meta.url).href;
 const PDF_OPTS = {
@@ -24,7 +25,7 @@ const fmt = (n) => (typeof n === "number" ? n.toLocaleString("vi-VN") : "");
 function addFiles(list) {
   let added = 0;
   for (const { file, path } of list) {
-    if (!/\.pdf$/i.test(file.name)) continue;
+    if (!/\.(pdf|xml)$/i.test(file.name)) continue;
     const key = `${path}|${file.size}|${file.lastModified}`;
     if (files.some((f) => f.key === key)) continue;
     files.push({ file, path, key, status: "wait" });
@@ -61,7 +62,7 @@ $("pickFiles").addEventListener("change", (e) => {
 });
 $("pickFolder").addEventListener("change", (e) => {
   const n = addFiles([...e.target.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name })));
-  if (!n) alert("Không tìm thấy file PDF mới nào trong thư mục này.");
+  if (!n) alert("Không tìm thấy file PDF/XML mới nào trong thư mục này.");
   e.target.value = "";
 });
 $("clearBtn").addEventListener("click", () => { files.length = 0; $("progress").textContent = ""; render(); });
@@ -244,7 +245,8 @@ detectPicker.addEventListener("change", () => {
   if (f) runDetect(f, f.name);
 });
 $("detectBtn").addEventListener("click", () => {
-  if (files.length) runDetect(files[0].file, files[0].path);
+  const pdf = files.find((f) => /\.pdf$/i.test(f.path));
+  if (pdf) runDetect(pdf.file, pdf.path);
   else detectPicker.click(); // chưa chọn file nào ở bước 1 -> cho chọn 1 file mẫu
 });
 
@@ -362,15 +364,25 @@ $("runBtn").addEventListener("click", async () => {
     $("progress").textContent = `Đang đọc ${i + 1}/${files.length}…`;
     f.status = "run"; f.inv = null; f.error = null; render();
     try {
-      const data = new Uint8Array(await f.file.arrayBuffer());
-      const inv = await parseInvoicePdf(pdfjsLib, data, PDF_OPTS, cfg);
+      const inv = /\.xml$/i.test(f.path)
+        ? parseInvoiceXml(await f.file.text(), cfg)
+        : await parseInvoicePdf(pdfjsLib, new Uint8Array(await f.file.arrayBuffer()), PDF_OPTS, cfg);
       inv.file = f.path;
       inv.kiem_tra = validate(inv);
       f.inv = inv;
       f.status = inv.kiem_tra === "OK" ? "ok" : "warn";
       if (inv.kiem_tra !== "OK") errors.push([f.path, inv.kiem_tra]);
       if (inv.thieu_truong) errors.push([f.path, inv.thieu_truong]);
-      invoices.push(inv);
+      // cùng 1 hoá đơn có cả PDF lẫn XML -> chỉ lấy 1 lần (ưu tiên XML vì chính xác hơn)
+      const key = [inv.mst_ncc, inv.ky_hieu, inv.so_hd].join("|");
+      const dup = inv.so_hd ? invoices.findIndex((x) => [x.mst_ncc, x.ky_hieu, x.so_hd].join("|") === key) : -1;
+      if (dup < 0) invoices.push(inv);
+      else {
+        const keepNew = inv.nguon === "XML" && invoices[dup].nguon !== "XML";
+        const [kept, dropped] = keepNew ? [inv, invoices[dup]] : [invoices[dup], inv];
+        if (keepNew) invoices[dup] = inv;
+        errors.push([dropped.file, `Trùng hoá đơn số ${inv.so_hd} với file ${kept.file} — đã bỏ qua, chỉ lấy 1 lần`]);
+      }
     } catch (e) {
       f.status = "err";
       f.error = /Invalid PDF|password/i.test(e.message) ? "File hỏng hoặc có mật khẩu" : e.message;

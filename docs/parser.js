@@ -92,8 +92,9 @@ const COLUMN_SYNONYMS = {
   dvt: ["don vi tinh", "dvt", "don vi"],
   so_luong: ["so luong", "sl"],
   don_gia: ["don gia", "gia"],
-  thue_suat: ["thue suat gtgt", "thue suat", "ts", "% thue"],
-  tien_thue: ["tien thue gtgt", "tien thue", "thue gtgt"],
+  // tiêu đề 2 tầng ("Thuế GTGT" gộp trên "%" | "Tiền thuế") -> chữ tầng trên rơi vào 1 trong 2 cột con
+  thue_suat: ["thue suat gtgt", "thue suat", "ts", "% thue", "%", "thue gtgt %", "thue suat %", "thue suat (%)"],
+  tien_thue: ["tien thue gtgt", "tien thue", "thue gtgt", "thue gtgt tien thue"],
   thanh_tien: ["thanh tien", "thanh tien sau thue", "tong tien", "thanh tien truoc thue"],
 };
 
@@ -155,7 +156,21 @@ async function readPage(pdfjsLib, page) {
       const stroked = next === OPS.stroke || next === OPS.closeStroke ||
         next === OPS.fillStroke || next === OPS.eoFillStroke;
       let k = 0, cur = null, start = null;
+      // đa giác tô màu mảnh (vd MISA vẽ đường kẻ bằng moveTo/lineTo + fill) -> coi như 1 đường kẻ
+      let poly = [];
+      const flushPoly = () => {
+        if (!stroked && poly.length >= 3) {
+          const xs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
+          const [ax, bx, ay, by] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+          if (bx - ax < 2.5 && by - ay > 3) addSeg([(ax + bx) / 2, ay], [(ax + bx) / 2, by]);
+          else if (by - ay < 2.5 && bx - ax > 3) addSeg([ax, (ay + by) / 2], [bx, (ay + by) / 2]);
+        }
+        poly = [];
+      };
       for (const op of ops) {
+        if (op === OPS.moveTo || op === OPS.rectangle) flushPoly();
+        if (op === OPS.moveTo) poly.push(toVp(coords[k], coords[k + 1]));
+        else if (op === OPS.lineTo) poly.push(toVp(coords[k], coords[k + 1]));
         if (op === OPS.rectangle) {
           const [x, y, w, h] = coords.slice(k, k + 4); k += 4;
           const p = [toVp(x, y), toVp(x + w, y), toVp(x + w, y + h), toVp(x, y + h)];
@@ -173,6 +188,7 @@ async function readPage(pdfjsLib, page) {
         else if (op === OPS.curveTo2 || op === OPS.curveTo3) { cur = toVp(coords[k + 2], coords[k + 3]); k += 4; }
         else if (op === OPS.closePath) { if (cur && start && stroked) addSeg(cur, start); cur = start; }
       }
+      flushPoly();
     }
   }
   return { items, hLines, vLines, width: vp.width, height: vp.height };
@@ -280,11 +296,20 @@ function parseTable(pg, tableExtras = []) {
     if (stop) bands.push([stop.yc - 1, stop.yc + 1]);
   }
 
+  // bảng kẻ ô: dòng nào không còn đường kẻ dọc của cột thứ 2 (vd bảng "Tổng hợp" ngay bên dưới) là hết bảng
+  const ruled = rowYs.length > 0 && bounds.length >= 4 && vLines.length > 0;
+  const inTable = (lo, hi) => {
+    const m = (lo + hi) / 2;
+    return vLines.some((l) => Math.abs(l.x - bounds[1]) < 2 && l.y0 <= m && l.y1 >= m);
+  };
+
   const rows = [];
   let totals = null, firstCells = null;
   for (const [lo, hi] of bands) {
     const inBand = body.filter((it) => it.yc > lo && it.yc <= hi);
     if (!inBand.length) continue;
+    const allText = norm(inBand.map((i) => i.str).join(" "));
+    if (ruled && !inTable(lo, hi) && !allText.includes("tong cong")) break;
     const cells = Array(bounds.length - 1).fill("");
     for (const it of inBand.sort((a, b) => a.yb - b.yb || a.x0 - b.x0)) {
       const ci = colIndex(bounds, center(it));
@@ -410,6 +435,8 @@ function parseKvLines(lines, keymap) {
     }
     hits.sort((a, b) => a[0] - b[0]);
     if (!hits.length) {
+      // dòng mở đầu bằng 1 nhãn lạ ("Căn cước công dân:") -> không phải phần tiếp của giá trị trước
+      if (LABEL_LIKE.test(src.trim())) { last = null; continue; }
       if (last && src.trim()) out[last] = ((out[last] || "") + " " + src.trim()).trim();
       continue;
     }
@@ -424,11 +451,35 @@ function parseKvLines(lines, keymap) {
   return out;
 }
 
+// MST đôi khi in từng chữ số rời nhau ("0 3 1 8 ...")
+const fixMst = (s) => (s && /^[\d\s-]+$/.test(s) ? s.replace(/\s+/g, "") : s);
+
 function parseParties(pg, headerTop) {
   const { items } = pg;
   const seller = items.find((it) => /^don vi ban hang\s*:/.test(norm(it.str)) && it.yc < headerTop);
   const buyer = items.find((it) => norm(it.str).startsWith("ho ten nguoi mua hang") && it.yc < headerTop);
-  if (!seller || !buyer) return null;
+  if (!buyer) return null;
+  if (!seller) {
+    // mẫu xếp chồng (vd MISA): tên công ty bán in đậm không có nhãn, ngay trên dòng "Mã số thuế" đầu tiên;
+    // khối người mua nằm bên dưới, bắt đầu từ "Họ tên người mua hàng"
+    const lines = [];
+    for (const it of [...items].filter((i) => i.yc < headerTop).sort((a, b) => a.yb - b.yb || a.x0 - b.x0)) {
+      const last = lines[lines.length - 1];
+      if (last && Math.abs(last.yb - it.yb) < 3) last.items.push(it);
+      else lines.push({ yb: it.yb, items: [it] });
+    }
+    const text = (l) => l.items.sort((a, b) => a.x0 - b.x0).map((i) => i.str).join(" ");
+    const iMst = lines.findIndex((l) => /^ma so thue/.test(norm(text(l))));
+    const iBuy = lines.findIndex((l) => l.items.includes(buyer));
+    if (iMst < 1 || iBuy < iMst) return null;
+    const out = {
+      ...parseKvLines(lines.slice(iMst, iBuy).map(text), SELLER_KEYS),
+      ...parseKvLines(lines.slice(iBuy).map(text), BUYER_KEYS),
+    };
+    const name = text(lines[iMst - 1]);
+    if (!name.includes(":")) out.ten_ncc = name;
+    return out;
+  }
   const xb = buyer.x0 - 1;
   const zone = items.filter((it) => it.yc >= seller.yc - 2 && it.yc < headerTop);
   return {
@@ -455,16 +506,24 @@ function parseMeta(text) {
   const pats = {
     ky_hieu: /Ký hiệu\s*(?:\([^)]*\))?\s*:\s*([A-Z0-9]+)/,
     so_hd: /Số\s*(?:\(No\.?\))?\s*:\s*(\d{1,8})\b/,
-    mcqt: /MCQT\s*:\s*([A-Z0-9]+)/,
-    ma_tra_cuu: /mã tra cứu\s*:\s*([A-Za-z0-9]+)/i,
+    mcqt: /(?:MCQT|Mã CQT)\s*:\s*([A-Z0-9]+)/,
+    ma_tra_cuu: /mã tra cứu\s*:\s*([A-Za-z0-9_\-]+)/i,
     bang_chu: /Số tiền viết bằng chữ\s*:\s*(.+)/,
   };
   for (const [k, re] of Object.entries(pats)) {
     const m = text.match(re);
     if (m) meta[k] = m[1].trim();
   }
-  const d = text.match(/Ngày\s+(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})/);
+  const d = text.match(/Ngày\s*(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/);
   if (d) meta.ngay_hd = new Date(Date.UTC(+d[3], +d[2] - 1, +d[1]));
+  // bảng "Tổng hợp" theo thuế suất (vd MISA): "Thuế suất 8%: 127.497 10.200 137.697", "Tổng cộng: a b c"
+  const NUM = "([\\d.,]+)";
+  for (const r of ["0", "5", "8", "10"]) {
+    const m = text.match(new RegExp(`^Thuế suất ${r}%\\s*:\\s*${NUM}\\s+${NUM}\\s+${NUM}\\s*$`, "m"));
+    if (m) { meta[`tien_hang_${r}`] = toNumber(m[1]); meta[`tien_thue_${r}`] = toNumber(m[2]); }
+  }
+  const tc = text.match(new RegExp(`^Tổng cộng\\s*:\\s*${NUM}\\s+${NUM}\\s+${NUM}\\s*$`, "m"));
+  if (tc) meta._tong = { tong_tien_hang: toNumber(tc[1]), tong_tien_thue: toNumber(tc[2]), tong_thanh_toan: toNumber(tc[3]) };
   for (const r of ["0", "5", "8", "10"]) {
     let m = text.match(new RegExp(`Tổng tiền hàng chịu thuế ${r}%\\s*:\\s*([\\d.,]+)`));
     if (m) meta[`tien_hang_${r}`] = toNumber(m[1]);
@@ -476,23 +535,26 @@ function parseMeta(text) {
 
 // ------------------------------------------------------------ kiểm tra
 
-export function isDiscount(it) { return norm(it.ten_hang).includes("chiet khau"); }
+export function isDiscount(it) { return it.tchat === 3 || norm(it.ten_hang).includes("chiet khau"); }
 
 export function validate(inv) {
   const notes = [];
-  let s = 0;
+  // cột Thành tiền có mẫu ghi sau thuế (MEDX…), có mẫu ghi trước thuế (MISA…) -> khớp 1 trong 2 là được
+  let s = 0, sTax = 0;
   for (const it of inv.items) {
-    const v = it.thanh_tien || 0;
-    s += isDiscount(it) && v > 0 ? -v : v;
+    const sign = isDiscount(it) && (it.thanh_tien || 0) > 0 ? -1 : 1;
+    s += sign * (it.thanh_tien || 0);
+    sTax += sign * ((it.thanh_tien || 0) + Math.abs(it.tien_thue || 0));
   }
   const total = inv.tong_thanh_toan;
-  if (total != null && Math.abs(s - total) > 2)
+  if (total != null && Math.abs(s - total) > 2 && Math.abs(sTax - total) > 2)
     notes.push(`Tổng dòng hàng ${s.toLocaleString("vi-VN")} ≠ tổng thanh toán ${total.toLocaleString("vi-VN")}`);
   for (const it of inv.items) {
     const { so_luong: q, don_gia: p, thanh_tien: tt } = it;
     const thue = it.tien_thue || 0;
     if ([q, p, tt].every((v) => typeof v === "number")) {
-      if (Math.min(Math.abs(q * p - tt), Math.abs(q * p + thue - tt)) > Math.max(2, 0.001 * Math.abs(tt)))
+      const ck = it.chiet_khau || 0;
+      if (Math.min(Math.abs(q * p - tt), Math.abs(q * p - ck - tt), Math.abs(q * p + thue - tt)) > Math.max(2, 0.001 * Math.abs(tt)))
         notes.push(`Dòng ${it.stt}: SL×ĐG không khớp thành tiền`);
     }
   }
@@ -573,7 +635,13 @@ export async function parseInvoicePdf(pdfjsLib, data, opts = {}, extras = []) {
     if (!items.length) throw new Error("Không nhận ra bảng hàng hoá (mẫu hoá đơn lạ)");
 
     const parties = parseParties(pages[0], firstHeaderTop ?? pages[0].height) || parsePartiesFallback(allText);
-    const inv = { ...parseMeta(allText), ...parties, ...totals, items };
+    const meta = parseMeta(allText);
+    const tongText = meta._tong;
+    delete meta._tong;
+    // tổng lấy từ bảng hàng; nếu bảng hàng không có dòng "Tổng cộng" thì lấy từ bảng tổng hợp
+    if (tongText && totals.tong_thanh_toan == null) totals = tongText;
+    const inv = { ...meta, ...parties, ...totals, items };
+    for (const k of ["mst_ncc", "mst_mua"]) if (inv[k]) inv[k] = fixMst(inv[k]);
     inv.extra = {};
     const missing = [...(missingCols || [])];
     for (const ex of headerExtras) {

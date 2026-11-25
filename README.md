@@ -3,6 +3,8 @@
 Đọc hoá đơn GTGT dạng **PDF điện tử** và gộp thành 1 file Excel để làm data đầu vào cho tool khác.
 Miễn phí, không cần API key.
 
+> Đọc được cả **PDF** và **XML** hoá đơn điện tử (chuẩn TT78). XML chính xác tuyệt đối, nên dùng khi có; cùng 1 hoá đơn có cả 2 thì chỉ lấy 1 lần (ưu tiên XML).
+
 ## 1. Bản web (dùng mọi lúc mọi nơi)
 
 Mở trang GitHub Pages của repo (thư mục [`docs/`](docs/)):

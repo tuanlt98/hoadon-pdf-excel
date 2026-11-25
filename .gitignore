@@ -8,3 +8,4 @@ __pycache__/
 .claude/
 *.mp4
 HUONG_DAN_*.md
+*.xml

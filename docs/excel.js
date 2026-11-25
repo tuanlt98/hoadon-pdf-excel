@@ -1,5 +1,5 @@
 // Tạo file Excel (3 sheet: ChiTiet, HoaDon, Loi) bằng ExcelJS (được truyền vào).
-import { isDiscount } from "./parser.js?v=5";
+import { isDiscount } from "./parser.js?v=6";
 
 const ITEM_COLUMNS = [
   ["File", (inv) => inv.file],
@@ -86,6 +86,7 @@ const round = (v, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 // tiền hàng chưa thuế của 1 dòng
 function preTax(it) {
   if (it.so_luong != null && it.don_gia != null) return it.so_luong * it.don_gia;
+  if (it.tien_truoc_thue != null) return it.tien_truoc_thue;
   if (it.thanh_tien != null) {
     if (it.tien_thue != null) return it.thanh_tien - it.tien_thue;
     return it.thanh_tien / (1 + (it.thue_suat || 0) / 100);
@@ -104,7 +105,7 @@ export function shortUnit(dvt) {
 // Dòng cuối lấy phần còn lại để tổng không lệch do làm tròn.
 export function allocateDiscounts(inv) {
   const goods = inv.items.filter((it) => !isDiscount(it));
-  const ck = new Map(goods.map((it) => [it, 0]));
+  const ck = new Map(goods.map((it) => [it, it.chiet_khau || 0])); // chiết khấu ghi sẵn trên dòng (XML)
   for (const d of inv.items.filter(isDiscount)) {
     const amount = Math.abs(preTax(d));
     let group = goods.filter((it) => (it.thue_suat ?? null) === (d.thue_suat ?? null));
