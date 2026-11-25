@@ -46,6 +46,19 @@ export function toNumber(s) {
   return Number.isInteger(v) ? v : Math.round(v * 10000) / 10000;
 }
 
+// ép kiểu giá trị trường bổ sung theo cấu hình: "text" | "number" | "date"
+export function castValue(v, type) {
+  const t = clean(v);
+  if (!t) return null;
+  if (type === "number") return toNumber(t.replace(/%$/, "")) ?? t;
+  if (type === "date") {
+    const vn = t.match(/(\d{1,2})\s+tháng\s+(\d{1,2})\s+năm\s+(\d{4})/i);
+    if (vn) return new Date(Date.UTC(+vn[3], +vn[2] - 1, +vn[1]));
+    return toDate(t.replace(/\s*([-/.])\s*/g, "$1"));
+  }
+  return t;
+}
+
 function toRate(s) {
   const t = clean(s);
   if (!t) return null;
@@ -192,7 +205,18 @@ function colIndex(bounds, x) {
 
 // ------------------------------------------------------------ bảng hàng hoá trên 1 trang
 
-function parseTable(pg) {
+// tìm cột của trường bổ sung theo chữ tiêu đề: khớp chính xác trước, rồi "chứa"
+function findColumn(labels, text) {
+  const n = norm(text);
+  if (!n) return -1;
+  const ls = labels.map(norm);
+  let i = ls.indexOf(n);
+  if (i < 0) i = ls.findIndex((l) => l.startsWith(n));
+  if (i < 0) i = ls.findIndex((l) => l.includes(n));
+  return i;
+}
+
+function parseTable(pg, tableExtras = []) {
   const { items, hLines, vLines } = pg;
   const stt = items.find((it) => norm(it.str) === "stt") ||
     items.find((it) => norm(it.str).startsWith("ten hang"));
@@ -231,6 +255,7 @@ function parseTable(pg) {
   }
   const cols = mapHeader(labels);
   if (!cols) return null;
+  const extraCols = tableExtras.map((ex) => ({ ...ex, idx: findColumn(labels, ex.label) }));
 
   const x0 = bounds[0], x1 = bounds[bounds.length - 1];
   const body = items.filter((it) => it.yc > bottom && center(it) >= x0 && center(it) <= x1);
@@ -275,7 +300,10 @@ function parseTable(pg) {
     if (mapHeader(cells)) continue; // header lặp
     const get = (k) => (k in cols ? clean(cells[cols[k]]) : "");
     if (!get("ten_hang")) continue;
+    const extra = {};
+    for (const ex of extraCols) extra[ex.name] = ex.idx >= 0 ? castValue(cells[ex.idx], ex.type) : null;
     rows.push({
+      extra,
       stt: toNumber(get("stt")) ?? get("stt"),
       ma_hang: get("ma_hang"),
       ten_hang: get("ten_hang"),
@@ -289,7 +317,49 @@ function parseTable(pg) {
       thanh_tien: toNumber(get("thanh_tien")),
     });
   }
-  return { rows, totals, headerTop: top };
+  return { rows, totals, headerTop: top, missing: extraCols.filter((e) => e.idx < 0).map((e) => e.label) };
+}
+
+// ------------------------------------------------------------ trường bổ sung "Nhãn : giá trị" ở phần thông tin chung
+
+const LABEL_LIKE = /:\s*$|^[^:\d]{2,40}\s*(\([^)]*\))?\s*:/;
+
+function findLabelValue(pages, label) {
+  const parts = norm(label).replace(/:$/, "").trim().split(" ").filter(Boolean);
+  if (!parts.length) return null;
+  const re = new RegExp(parts.map(escapeRe).join("\\s+") + "\\s*(?:\\([^)]*\\))?\\s*:\\s*");
+  for (const pg of pages) {
+    // gom chữ theo dòng, nhớ vị trí bắt đầu từng mẩu chữ
+    const lines = [];
+    for (const it of [...pg.items].sort((a, b) => a.yb - b.yb || a.x0 - b.x0)) {
+      const last = lines[lines.length - 1];
+      if (last && Math.abs(last.yb - it.yb) < 3) last.items.push(it);
+      else lines.push({ yb: it.yb, items: [it] });
+    }
+    for (const ln of lines) {
+      ln.items.sort((a, b) => a.x0 - b.x0);
+      let text = "";
+      const starts = [];
+      for (const it of ln.items) {
+        if (text) text += " ";
+        starts.push(text.length);
+        text += it.str.normalize("NFC");
+      }
+      const m = re.exec(normSameLen(text));
+      if (!m) continue;
+      const vStart = m.index + m[0].length;
+      let vEnd = text.length;
+      // dừng ở mẩu chữ kế tiếp trông giống một nhãn khác ("Mã đơn hàng :")
+      ln.items.forEach((it, i) => {
+        if (starts[i] >= vStart && starts[i] < vEnd && starts[i] > vStart && LABEL_LIKE.test(it.str)) vEnd = starts[i];
+      });
+      let val = text.slice(vStart, vEnd).trim();
+      // bỏ dấu đóng ngoặc lẻ ở cuối, vd "mã tra cứu: ABC )"
+      if (!val.includes("(")) val = val.replace(/\s*[)\]]+$/, "").trim();
+      if (val) return val;
+    }
+  }
+  return null;
 }
 
 // ------------------------------------------------------------ người bán / người mua
@@ -427,7 +497,11 @@ export function validate(inv) {
 
 // ------------------------------------------------------------ entry
 
-export async function parseInvoicePdf(pdfjsLib, data, opts = {}) {
+// extras: [{name: "Tên cột Excel", label: "chữ trên hoá đơn", where: "header"|"table", type: "text"|"number"|"date"}]
+export async function parseInvoicePdf(pdfjsLib, data, opts = {}, extras = []) {
+  extras = extras.filter((e) => e && clean(e.name) && clean(e.label));
+  const tableExtras = extras.filter((e) => e.where === "table");
+  const headerExtras = extras.filter((e) => e.where !== "table");
   const doc = await pdfjsLib.getDocument({ data, ...opts }).promise;
   try {
     const pages = [];
@@ -437,11 +511,11 @@ export async function parseInvoicePdf(pdfjsLib, data, opts = {}) {
     if (allText.replace(/\s/g, "").length < 50)
       throw new Error("PDF không có lớp chữ (PDF scan/ảnh) - cần bản PDF điện tử gốc hoặc nhập tay");
 
-    let items = [], totals = {}, firstHeaderTop = null;
+    let items = [], totals = {}, firstHeaderTop = null, missingCols = null;
     for (const pg of pages) {
-      const t = parseTable(pg);
+      const t = parseTable(pg, tableExtras);
       if (!t) continue;
-      if (firstHeaderTop == null) firstHeaderTop = t.headerTop;
+      if (firstHeaderTop == null) { firstHeaderTop = t.headerTop; missingCols = t.missing; }
       items = items.concat(t.rows);
       if (t.totals) totals = t.totals;
     }
@@ -449,6 +523,14 @@ export async function parseInvoicePdf(pdfjsLib, data, opts = {}) {
 
     const parties = parseParties(pages[0], firstHeaderTop ?? pages[0].height) || parsePartiesFallback(allText);
     const inv = { ...parseMeta(allText), ...parties, ...totals, items };
+    inv.extra = {};
+    const missing = [...(missingCols || [])];
+    for (const ex of headerExtras) {
+      const v = findLabelValue(pages, ex.label);
+      inv.extra[ex.name] = v == null ? null : castValue(v, ex.type);
+      if (v == null) missing.push(ex.label);
+    }
+    inv.thieu_truong = missing.length ? "Không thấy: " + missing.join(", ") : "";
     inv.so_dong = items.length;
     inv.kiem_tra = validate(inv);
     return inv;

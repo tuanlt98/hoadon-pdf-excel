@@ -35,6 +35,32 @@
     </section>
 
     <section class="card">
+      <details id="extraBox">
+        <summary><h2><span class="step">⚙</span> Cột bổ sung <span id="extraCount" class="badge"></span> <small>(tuỳ chọn)</small></h2></summary>
+        <p class="hint">Lấy thêm trường không có sẵn trong file Excel. Gõ <b>đúng chữ in trên hoá đơn</b> (không cần dấu hai chấm, không phân biệt hoa thường/dấu).</p>
+        <ul class="hint">
+          <li><b>Thông tin chung</b>: trường dạng <i>“Nhãn : giá trị”</i> ở phần đầu/cuối hoá đơn, vd <i>Mã khách hàng</i>, <i>Số hợp đồng</i>, <i>Ghi chú</i>. Ra ở cả sheet ChiTiet và HoaDon.</li>
+          <li><b>Cột trong bảng hàng</b>: tiêu đề một cột của bảng hàng hoá, vd <i>Nước sản xuất</i>, <i>Chiết khấu (%)</i>. Ra ở sheet ChiTiet.</li>
+        </ul>
+        <div class="table-wrap">
+          <table id="extraTable">
+            <thead><tr><th>Tên cột trong Excel</th><th>Chữ trên hoá đơn</th><th>Lấy ở</th><th>Kiểu</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button id="addExtra" class="btn" type="button">+ Thêm trường</button>
+          <button id="exportCfg" class="btn ghost" type="button">Lưu cấu hình ra file</button>
+          <label class="btn ghost">
+            <input id="importCfg" type="file" accept=".json,application/json" hidden>
+            Mở file cấu hình
+          </label>
+        </div>
+        <p class="hint">Cấu hình tự lưu trên trình duyệt này. Muốn dùng trên máy khác hoặc chia sẻ cho người khác: “Lưu cấu hình ra file” rồi gửi file đó để họ “Mở file cấu hình”.</p>
+      </details>
+    </section>
+
+    <section class="card">
       <h2><span class="step">2</span> Nơi lưu file Excel</h2>
       <div class="row">
         <button id="pickOut" class="btn" type="button">Chọn thư mục lưu</button>

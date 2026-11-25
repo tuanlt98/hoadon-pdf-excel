@@ -40,7 +40,7 @@ const INVOICE_COLUMNS = [
 
 const TEXT_COLS = new Set(["Số HĐ", "MST NCC", "MST mua", "Mã hàng", "Số lô", "STK NCC", "ĐT NCC", "Mã đặt hàng", "Mã đơn hàng"]);
 
-function fillSheet(ws, headers, rows) {
+function fillSheet(ws, headers, rows, textCols = TEXT_COLS) {
   ws.addRow(headers);
   for (const r of rows) ws.addRow(r.map((v) => (v === "" || v === undefined ? null : v)));
   const head = ws.getRow(1);
@@ -60,7 +60,7 @@ function fillSheet(ws, headers, rows) {
     col.eachCell({ includeEmpty: false }, (cell, rowNum) => {
       if (rowNum === 1) return;
       const v = cell.value;
-      if (TEXT_COLS.has(h)) cell.numFmt = "@";
+      if (textCols.has(h)) cell.numFmt = "@";
       else if (v instanceof Date) cell.numFmt = "dd/mm/yyyy";
       else if (typeof v === "number" && h !== "STT" && h !== "Thuế suất (%)")
         cell.numFmt = Number.isInteger(v) ? "#,##0" : "#,##0.00";
@@ -68,13 +68,30 @@ function fillSheet(ws, headers, rows) {
   });
 }
 
-export async function buildExcel(ExcelJS, invoices, errors) {
+// extras: cấu hình trường bổ sung (xem parser.js). Trường "header" -> cả 2 sheet, trường "table" -> ChiTiet.
+export async function buildExcel(ExcelJS, invoices, errors, extras = []) {
+  extras = extras.filter((e) => e && String(e.name || "").trim() && String(e.label || "").trim());
+  const used = new Set([...ITEM_COLUMNS, ...INVOICE_COLUMNS].map((c) => c[0]));
+  const colName = (e) => (used.has(e.name.trim()) ? e.name.trim() + " (bổ sung)" : e.name.trim());
+  const textCols = new Set([...TEXT_COLS, ...extras.filter((e) => (e.type || "text") === "text").map(colName)]);
+  const headerEx = extras.filter((e) => e.where !== "table");
+
+  const itemCols = [
+    ...ITEM_COLUMNS,
+    ...extras.map((e) => [colName(e), (inv, it) => (e.where === "table" ? it.extra?.[e.name] : inv.extra?.[e.name])]),
+  ];
+  const invCols = [
+    ...INVOICE_COLUMNS.map(([h, k]) => [h, (inv) => inv[k]]),
+    ...headerEx.map((e) => [colName(e), (inv) => inv.extra?.[e.name]]),
+  ];
+  if (extras.length) invCols.splice(2, 0, ["Trường không thấy", (inv) => inv.thieu_truong]);
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Hoá đơn PDF → Excel";
-  fillSheet(wb.addWorksheet("ChiTiet"), ITEM_COLUMNS.map((c) => c[0]),
-    invoices.flatMap((inv) => inv.items.map((it) => ITEM_COLUMNS.map(([, f]) => f(inv, it)))));
-  fillSheet(wb.addWorksheet("HoaDon"), INVOICE_COLUMNS.map((c) => c[0]),
-    invoices.map((inv) => INVOICE_COLUMNS.map(([, k]) => inv[k])));
+  fillSheet(wb.addWorksheet("ChiTiet"), itemCols.map((c) => c[0]),
+    invoices.flatMap((inv) => inv.items.map((it) => itemCols.map(([, f]) => f(inv, it)))), textCols);
+  fillSheet(wb.addWorksheet("HoaDon"), invCols.map((c) => c[0]),
+    invoices.map((inv) => invCols.map(([, f]) => f(inv))), textCols);
   fillSheet(wb.addWorksheet("Loi"), ["File", "Lỗi / cảnh báo"],
     errors.length ? errors : [["", "Không có lỗi"]]);
   return wb.xlsx.writeBuffer();

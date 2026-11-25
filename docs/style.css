@@ -70,4 +70,19 @@ tr.empty td { color: var(--muted); text-align: center; padding: 18px; }
 .st-ok { color: var(--ok); font-weight: 600; }
 .st-warn { color: var(--warn); font-weight: 600; }
 .st-err { color: var(--err); font-weight: 600; }
+details summary { cursor: pointer; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary h2 { margin: 0; }
+details[open] summary h2 { margin-bottom: 10px; }
+details summary small { color: var(--muted); font-weight: 400; font-size: 13px; }
+details summary::after { content: "▸ mở"; float: right; margin-top: -24px; color: var(--muted); font-size: 13px; }
+details[open] summary::after { content: "▾ đóng"; }
+.badge { background: #eef6f1; color: var(--accent); border-radius: 10px; padding: 0 8px; font-size: 13px; }
+.badge:empty { display: none; }
+ul.hint { padding-left: 20px; margin: 6px 0 10px; }
+#extraTable input, #extraTable select {
+  font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; width: 100%; min-width: 120px;
+}
+#extraTable td { border-bottom: none; padding: 4px 6px 4px 0; }
+.icon-btn { border: none; background: none; color: var(--err); cursor: pointer; font-size: 18px; padding: 4px 8px; }
 footer { font-size: 13px; color: var(--muted); margin-top: 8px; }

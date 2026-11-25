@@ -12,6 +12,10 @@ Mở trang GitHub Pages của repo (thư mục [`docs/`](docs/)):
    Trình duyệt khác thì file được tải về thư mục Tải về.
 3. Bấm **Đọc & xuất Excel**.
 
+**Cột bổ sung (⚙)**: lấy thêm trường không có sẵn — gõ đúng chữ in trên hoá đơn, chọn lấy ở
+“Thông tin chung” (dạng `Nhãn : giá trị`) hoặc “Cột trong bảng hàng” (tiêu đề cột), chọn kiểu Chữ/Số/Ngày.
+Cấu hình tự lưu trên trình duyệt; có thể lưu ra file `.json` để chia sẻ cho người khác.
+
 Toàn bộ xử lý chạy ngay trong trình duyệt của người dùng — file PDF **không được tải lên** máy chủ nào.
 
 Chạy thử trên máy: `python -m http.server 8765 --directory docs` rồi mở http://localhost:8765

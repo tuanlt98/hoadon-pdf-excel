@@ -96,6 +96,94 @@ drop.addEventListener("drop", async (e) => {
   addFiles(out);
 });
 
+// ------------------------------------------------------------ cấu hình cột bổ sung
+
+const CFG_KEY = "hoadon-extras";
+let extras = [];
+try { extras = JSON.parse(localStorage.getItem(CFG_KEY) || "[]"); } catch { extras = []; }
+
+const validExtras = () => extras.filter((e) => e.name.trim() && e.label.trim());
+function saveExtras() {
+  localStorage.setItem(CFG_KEY, JSON.stringify(extras));
+  const n = validExtras().length;
+  $("extraCount").textContent = n ? `${n} trường` : "";
+}
+
+function renderExtras() {
+  const tb = $("extraTable").querySelector("tbody");
+  if (!extras.length) {
+    tb.innerHTML = '<tr class="empty"><td colspan="5">Chưa có trường bổ sung — bấm “+ Thêm trường”.</td></tr>';
+  } else {
+    tb.innerHTML = extras.map((e, i) => `<tr data-i="${i}">
+      <td><input data-k="name" value="${esc(e.name)}" placeholder="vd: Mã KH"></td>
+      <td><input data-k="label" value="${esc(e.label)}" placeholder="vd: Mã khách hàng"></td>
+      <td><select data-k="where">
+        <option value="header"${e.where !== "table" ? " selected" : ""}>Thông tin chung</option>
+        <option value="table"${e.where === "table" ? " selected" : ""}>Cột trong bảng hàng</option></select></td>
+      <td><select data-k="type">
+        <option value="text"${e.type === "text" ? " selected" : ""}>Chữ</option>
+        <option value="number"${e.type === "number" ? " selected" : ""}>Số</option>
+        <option value="date"${e.type === "date" ? " selected" : ""}>Ngày</option></select></td>
+      <td><button class="icon-btn" data-del="${i}" title="Xoá trường này" type="button">✕</button></td></tr>`).join("");
+  }
+  saveExtras();
+}
+
+$("extraTable").addEventListener("input", (ev) => {
+  const k = ev.target.dataset.k, tr = ev.target.closest("tr");
+  if (!k || !tr) return;
+  extras[+tr.dataset.i][k] = ev.target.value;
+  saveExtras();
+});
+// gõ "Chữ trên hoá đơn" mà để trống tên cột -> tự lấy làm tên cột
+$("extraTable").addEventListener("change", (ev) => {
+  const tr = ev.target.closest("tr");
+  if (ev.target.dataset.k !== "label" || !tr) return;
+  const e = extras[+tr.dataset.i];
+  if (!e.name.trim() && e.label.trim()) {
+    e.name = e.label.trim().replace(/:$/, "");
+    tr.querySelector('[data-k="name"]').value = e.name;
+    saveExtras();
+  }
+});
+$("extraTable").addEventListener("click", (ev) => {
+  const d = ev.target.dataset.del;
+  if (d !== undefined) { extras.splice(+d, 1); renderExtras(); }
+});
+$("addExtra").addEventListener("click", () => {
+  extras.push({ name: "", label: "", where: "header", type: "text" });
+  renderExtras();
+  $("extraTable").querySelector("tbody tr:last-child input").focus();
+});
+$("exportCfg").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify({ version: 1, extras: validExtras() }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cau_hinh_hoa_don.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+});
+$("importCfg").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0];
+  ev.target.value = "";
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const list = Array.isArray(data) ? data : data.extras;
+    if (!Array.isArray(list)) throw new Error("không đúng định dạng");
+    extras = list.map((e) => ({
+      name: String(e.name ?? ""), label: String(e.label ?? ""),
+      where: e.where === "table" ? "table" : "header",
+      type: ["number", "date"].includes(e.type) ? e.type : "text",
+    }));
+    renderExtras();
+    $("extraBox").open = true;
+  } catch (e) {
+    alert("Không đọc được file cấu hình: " + e.message);
+  }
+});
+renderExtras();
+
 // ------------------------------------------------------------ thư mục lưu (nhớ giữa các lần mở trang)
 
 function idb() {
@@ -193,6 +281,7 @@ $("runBtn").addEventListener("click", async () => {
   }
 
   $("runBtn").disabled = $("clearBtn").disabled = true;
+  const cfg = validExtras();
   const invoices = [], errors = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
@@ -200,12 +289,13 @@ $("runBtn").addEventListener("click", async () => {
     f.status = "run"; f.inv = null; f.error = null; render();
     try {
       const data = new Uint8Array(await f.file.arrayBuffer());
-      const inv = await parseInvoicePdf(pdfjsLib, data, PDF_OPTS);
+      const inv = await parseInvoicePdf(pdfjsLib, data, PDF_OPTS, cfg);
       inv.file = f.path;
       inv.kiem_tra = validate(inv);
       f.inv = inv;
       f.status = inv.kiem_tra === "OK" ? "ok" : "warn";
       if (inv.kiem_tra !== "OK") errors.push([f.path, inv.kiem_tra]);
+      if (inv.thieu_truong) errors.push([f.path, inv.thieu_truong]);
       invoices.push(inv);
     } catch (e) {
       f.status = "err";
@@ -217,7 +307,7 @@ $("runBtn").addEventListener("click", async () => {
 
   try {
     $("progress").textContent = "Đang tạo file Excel…";
-    const buf = await buildExcel(window.ExcelJS, invoices, errors);
+    const buf = await buildExcel(window.ExcelJS, invoices, errors, cfg);
     const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const msg = await saveFile(blob, outName());
     $("progress").textContent = `${msg} — ${invoices.length} hoá đơn, ${errors.length} lỗi/cảnh báo.`;
